@@ -5,15 +5,17 @@ import torch
 from Bio import SeqIO
 
 from src.data_util.data_processing import prepare_sequence
-from src.data_util.data_constants import word_to_ix, tag_to_ix, families
+from src.data_util.data_constants import word_to_ix, tag_to_ix
 from src.util.util import dotbracket_to_graph
 
 
 class RNAFamilyGraphDataset(InMemoryDataset):
     def __init__(self, file_path, foldings_path, transform=None, pre_transform=None,
                  seq_max_len=10000,
-                 seq_min_len=1, n_samples=None):
+                 seq_min_len=1, n_samples=None, families=None):
         super(RNAFamilyGraphDataset, self).__init__(file_path, transform, pre_transform)
+
+        self.families = families
 
         with open(file_path, "r") as handle:
             records = list(SeqIO.parse(handle, "fasta"))
@@ -62,8 +64,8 @@ class RNAFamilyGraphDataset(InMemoryDataset):
     def download(self):
         pass
 
-    def process(self):
-        pass
+    # def process(self):
+    #     pass
 
     @property
     def raw_file_names(self):

@@ -6,19 +6,19 @@ ix_to_word = {v: k for k, v in word_to_ix.items()}
 tag_to_ix = {"<PAD>": 0, ".": 1, "(": 2, ")": 3}
 ix_to_tag = {v: k for k, v in tag_to_ix.items()}
 
-families = [
-           '5S_rRNA',
-           '5_8S_rRNA',
-           'CD-box',
-           'HACA-box',
-           'IRES',
-           'Intron_gpI',
-           'Intron_gpII',
-           'leader',
-           'miRNA',
-           'riboswitch',
-           'ribozyme',
-           'scaRNA',
-           'tRNA'
-           ]
+# families = [
+#            '5S_rRNA',
+#            '5_8S_rRNA',
+#            'CD-box',
+#            'HACA-box',
+#            'IRES',
+#            'Intron_gpI',
+#            'Intron_gpII',
+#            'leader',
+#            'miRNA',
+#            'riboswitch',
+#            'ribozyme',
+#            'scaRNA',
+#            'tRNA'
+#            ]
 

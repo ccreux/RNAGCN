@@ -7,7 +7,7 @@ import pickle
 import torch
 import argparse
 
-from src.data_util.data_constants import families, word_to_ix
+from src.data_util.data_constants import word_to_ix
 from src.data_util.rna_family_graph_dataset import RNAFamilyGraphDataset
 from torch_geometric.data import DataLoader
 from src.model.gcn import GCN
@@ -17,14 +17,19 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--model_name', default="test", help='model name')
 parser.add_argument('--test_dataset',
                     default='../data/test_13_classes.fasta', help='Path to test dataset')
+parser.add_argument('--foldings_dataset', default='../data/foldings.pkl', help="Path to foldings")
 args = parser.parse_args()
 
-foldings_dataset = '../data/foldings.pkl'
+foldings_dataset = args.foldings_dataset
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+cls = open(args.test_dataset, "r").readlines()[::2]
+cls = [elt.split()[1].strip() for elt in cls]
+families = sorted(set(cls))
 n_classes = len(families)
 
-test_set = RNAFamilyGraphDataset(args.test_dataset, foldings_dataset)
+test_set = RNAFamilyGraphDataset(args.test_dataset, foldings_dataset, families=families)
 test_loader = DataLoader(test_set, batch_size=64, shuffle=False)
 
 opt = pickle.load(open('../results_family_classification/' + args.model_name +

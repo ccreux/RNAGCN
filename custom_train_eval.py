@@ -1,22 +1,17 @@
 import os
-import sys
-sys.path.append(os.getcwd().split('src')[0])
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import pickle
-import os
-import time
 import argparse
 import numpy as np
+import pandas as pd
 from torch_geometric.data import DataLoader
 
 from src.model.gcn import GCN
 from src.data_util.rna_family_graph_dataset import RNAFamilyGraphDataset
-from src.util.visualization_util import plot_loss
 from src.data_util.data_constants import word_to_ix
-from src.evaluation.evaluation_util import evaluate_family_classifier, compute_metrics_family
+from src.training.train_model import run
 
 torch.manual_seed(0)
 np.random.seed(0)
@@ -45,7 +40,7 @@ parser.set_defaults(batch_norm=True)
 parser.add_argument('--residuals', type=bool, default=False, help='Whether to use residuals')
 parser.add_argument('--set2set_pooling', type=bool, default=True, help='Whether to use set2set '
                                                                         'pooling')
-parser.add_argument('--early_stopping', type=int, default=30, help='Number of epochs for early '
+parser.add_argument('--early_stopping', type=int, default=100000, help='Number of epochs for early '
                                                                    'stopping')
 parser.add_argument('--verbose', type=bool, default=False, help='Verbosity')
 parser.add_argument('--foldings_dataset', type=str,
@@ -56,14 +51,16 @@ parser.add_argument('--train_dataset', type=str,
 parser.add_argument('--val_dataset', type=str,
                     default='../data/val.fasta', help='Path to val dataset')
 
-parser.add_argument('--foldings_dataset', type=str, 
-                    default='../data/foldings.pkl', help='Path to foldings dataset')
+parser.add_argument('--save_path', help='Path to save predictions')
+
 opt = parser.parse_args()
 print(opt)
 
+# get class names instead of using the "families" variable from data_constants.py
 cls = open(opt.train_dataset, "r").readlines()[::2]
 cls = [elt.split()[1].strip() for elt in cls]
 families = sorted(set(cls))
+
 n_classes = len(families)
 model = GCN(n_features=opt.embedding_dim, hidden_dim=opt.hidden_dim, n_classes=n_classes,
             n_conv_layers=opt.n_conv_layers,
@@ -90,96 +87,117 @@ val_set = RNAFamilyGraphDataset(opt.val_dataset, opt.foldings_dataset, seq_max_l
 train_loader = DataLoader(train_set, batch_size=opt.batch_size, shuffle=True)
 val_loader = DataLoader(val_set, batch_size=opt.batch_size, shuffle=False)
 
-def train_epoch(model, train_loader):
-    model.train()
-    losses = []
-    accuracies = []
+# def train_epoch(model, train_loader):
+#     model.train()
+#     losses = []
+#     accuracies = []
 
-    for batch_idx, data in enumerate(train_loader):
-        data.x = data.x.to(opt.device)
-        data.edge_index = data.edge_index.to(opt.device)
-        data.edge_attr = data.edge_attr.to(opt.device)
-        data.batch = data.batch.to(opt.device)
-        data.y = data.y.to(opt.device)
+#     for batch_idx, data in enumerate(train_loader):
+#         data.x = data.x.to(opt.device)
+#         data.edge_index = data.edge_index.to(opt.device)
+#         data.edge_attr = data.edge_attr.to(opt.device)
+#         data.batch = data.batch.to(opt.device)
+#         data.y = data.y.to(opt.device)
 
-        model.zero_grad()
+#         model.zero_grad()
+
+#         out = model(data)
+
+#         # Loss is computed with respect to the target sequence
+#         loss = loss_function(out, data.y)
+#         losses.append(loss.item())
+#         loss.backward()
+#         optimizer.step()
+
+#         # Metrics are computed with respect to generated folding
+#         pred = out.max(1)[1]
+#         accuracy = compute_metrics_family(data.y, pred)
+#         accuracies.append(accuracy)
+
+#     avg_loss = np.mean(losses)
+#     avg_accuracy = np.mean(accuracies)
+
+#     print("training loss is {}".format(avg_loss))
+#     print("accuracy: {}".format(avg_accuracy))
+
+#     return avg_loss.item(), avg_accuracy
+
+
+# def train(model, n_epochs, train_loader, results_dir, model_dir):
+#     print("The model contains {} parameters".format(sum(p.numel() for p in model.parameters() if p.requires_grad)))
+
+#     train_losses = []
+#     train_accuracies = []
+#     val_losses = []
+#     val_accuracies = []
+
+#     for epoch in range(n_epochs):
+#         start = time.time()
+#         print("Epoch {}: ".format(epoch + 1))
+
+#         loss, accuracy = train_epoch(model, train_loader)
+#         val_loss, val_accuracy = evaluate_family_classifier(model, val_loader,
+#                                                                           loss_function, mode='val',
+#                                                                     device=opt.device, verbose=opt.verbose)
+#         end = time.time()
+#         print("Epoch took {0:.2f} seconds".format(end - start))
+
+#         if not val_accuracies or val_accuracy > max(val_accuracies):
+#             torch.save(model.state_dict(), model_dir + 'model.pt')
+#             print("Saved updated model")
+#         #
+#         train_losses.append(loss)
+#         val_losses.append(val_loss)
+#         train_accuracies.append(accuracy)
+#         val_accuracies.append(val_accuracy)
+
+#         plot_loss(train_losses, val_losses,file_name=results_dir + 'loss.jpg')
+#         plot_loss(train_accuracies, val_accuracies, file_name=results_dir + 'acc.jpg',
+#                   y_label='accuracy')
+
+#         pickle.dump({
+#             'train_losses': train_losses,
+#             'val_losses': val_losses,
+#             'train_accuracies': train_accuracies,
+#             'val_accuracies': val_accuracies,
+#         }, open(results_dir + 'scores.pkl', 'wb'))
+
+#         if len(val_accuracies) > opt.early_stopping and max(val_accuracies[-opt.early_stopping:])\
+#                 < max(val_accuracies):
+#             print("Training terminated because of early stopping")
+#             print("Best val_loss: {}".format(min(val_losses)))
+#             print("Best val_accuracy: {}".format(max(val_accuracies)))
+
+#             with open(results_dir + 'scores.txt', 'w') as f:
+#                 f.write("Best val_accuracy: {}".format(max(
+#                     val_accuracies)))
+#             break
+
+
+def eval(model, test_loader, device):
+    y_pred = []
+    y_true = []
+
+    for batch_idx, data in enumerate(test_loader):
+        model.eval()
+
+        data.x = data.x.to(device)
+        data.edge_index = data.edge_index.to(device)
+        data.edge_attr = data.edge_attr.to(device)
+        data.batch = data.batch.to(device)
+        data.y = data.y.to(device)
 
         out = model(data)
 
-        # Loss is computed with respect to the target sequence
-        loss = loss_function(out, data.y)
-        losses.append(loss.item())
-        loss.backward()
-        optimizer.step()
-
-        # Metrics are computed with respect to generated folding
         pred = out.max(1)[1]
-        accuracy = compute_metrics_family(data.y, pred)
-        accuracies.append(accuracy)
 
-    avg_loss = np.mean(losses)
-    avg_accuracy = np.mean(accuracies)
-
-    print("training loss is {}".format(avg_loss))
-    print("accuracy: {}".format(avg_accuracy))
-
-    return avg_loss.item(), avg_accuracy
-
-
-def run(model, n_epochs, train_loader, results_dir, model_dir):
-    print("The model contains {} parameters".format(sum(p.numel() for p in model.parameters() if p.requires_grad)))
-
-    train_losses = []
-    train_accuracies = []
-    val_losses = []
-    val_accuracies = []
-
-    for epoch in range(n_epochs):
-        start = time.time()
-        print("Epoch {}: ".format(epoch + 1))
-
-        loss, accuracy = train_epoch(model, train_loader)
-        val_loss, val_accuracy = evaluate_family_classifier(model, val_loader,
-                                                                          loss_function, mode='val',
-                                                                    device=opt.device, verbose=opt.verbose)
-        end = time.time()
-        print("Epoch took {0:.2f} seconds".format(end - start))
-
-        if not val_accuracies or val_accuracy > max(val_accuracies):
-            torch.save(model.state_dict(), model_dir + 'model.pt')
-            print("Saved updated model")
-        #
-        train_losses.append(loss)
-        val_losses.append(val_loss)
-        train_accuracies.append(accuracy)
-        val_accuracies.append(val_accuracy)
-
-        plot_loss(train_losses, val_losses,file_name=results_dir + 'loss.jpg')
-        plot_loss(train_accuracies, val_accuracies, file_name=results_dir + 'acc.jpg',
-                  y_label='accuracy')
-
-        pickle.dump({
-            'train_losses': train_losses,
-            'val_losses': val_losses,
-            'train_accuracies': train_accuracies,
-            'val_accuracies': val_accuracies,
-        }, open(results_dir + 'scores.pkl', 'wb'))
-
-        if len(val_accuracies) > opt.early_stopping and max(val_accuracies[-opt.early_stopping:])\
-                < max(val_accuracies):
-            print("Training terminated because of early stopping")
-            print("Best val_loss: {}".format(min(val_losses)))
-            print("Best val_accuracy: {}".format(max(val_accuracies)))
-
-            with open(results_dir + 'scores.txt', 'w') as f:
-                f.write("Best val_accuracy: {}".format(max(
-                    val_accuracies)))
-            break
-
+        y_pred += list(pred.cpu().numpy())
+        y_true += list(data.y.cpu().numpy())
+    return y_true, y_pred
 
 def main():
-    results_dir = '../results_family_classification/{}/'.format(opt.model_name)
-    model_dir = '../models_family_classification/{}/'.format(opt.model_name)
+    results_dir = 'results_family_classification/{}/'.format(opt.model_name)
+    model_dir = 'models_family_classification/{}/'.format(opt.model_name)
     os.makedirs(results_dir, exist_ok=True)
     os.makedirs(model_dir, exist_ok=True)
 
@@ -189,9 +207,23 @@ def main():
     with open(results_dir + 'hyperparams.pkl', 'wb') as f:
         pickle.dump(opt, f)
 
+
     run(model, opt.n_epochs, train_loader, results_dir, model_dir)
+
+    y_true, y_pred = eval(model, val_loader, opt.device)
+
+
+    # Save predictions
+    ids = open(opt.val_dataset, "r").readlines()[::2]
+    ids = [elt.split()[0].strip().replace(">", "") for elt in ids]
+    predictions = pd.DataFrame(columns=["y_true", "y_pred"], index=ids)
+    predictions["y_true"] = y_true
+    predictions["y_true"] = predictions["y_true"].map(dict(enumerate(families)))
+    predictions["y_pred"] = y_pred
+    predictions["y_pred"] = predictions["y_pred"].map(dict(enumerate(families)))
+    predictions.to_csv(opt.save_path)
 
 
 if __name__ == "__main__":
-    main()
+        main()
 
