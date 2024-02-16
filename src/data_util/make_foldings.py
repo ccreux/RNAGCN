@@ -5,7 +5,7 @@ from time import time
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--path_fasta", help="Path to fasta file containing structure prediction"
+        "--structure_path", help="Path to .dot file containing structure predictions"
     )
     parser.add_argument(
         "--save_path",
@@ -16,7 +16,7 @@ def main():
     t0 = time()
 
     formatted = {}
-    with open(args.path_fasta, "r") as f:
+    with open(args.structure_path, "r") as f:
         lines = f.readlines()
         print(f"Lines: {len(lines)} -> {len(lines)/3} RNAs")
         for i in range(0, len(lines), 3):
