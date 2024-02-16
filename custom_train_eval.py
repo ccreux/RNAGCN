@@ -1,4 +1,4 @@
-import os
+import os, time
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -11,7 +11,8 @@ from torch_geometric.data import DataLoader
 from src.model.gcn import GCN
 from src.data_util.rna_family_graph_dataset import RNAFamilyGraphDataset
 from src.data_util.data_constants import word_to_ix
-from src.training.train_model import run
+from src.evaluation.evaluation_util import evaluate_family_classifier, compute_metrics_family
+from src.util.visualization_util import plot_loss
 
 torch.manual_seed(0)
 np.random.seed(0)
@@ -44,14 +45,14 @@ parser.add_argument('--early_stopping', type=int, default=100000, help='Number o
                                                                    'stopping')
 parser.add_argument('--verbose', type=bool, default=False, help='Verbosity')
 parser.add_argument('--foldings_dataset', type=str,
-                    default='../data/foldings.pkl', help='Path to foldings')
+                    default='../../datasets/dataset1/foldings.pkl', help='Path to foldings')
 parser.add_argument('--train_dataset', type=str,
-                    default='../data/train.fasta', help='Path to training '
+                    default='../../datasets/dataset1/train.fasta', help='Path to training '
                                                                           'dataset')
 parser.add_argument('--val_dataset', type=str,
-                    default='../data/val.fasta', help='Path to val dataset')
+                    default='../../datasets/dataset1/test.fasta', help='Path to val dataset')
 
-parser.add_argument('--save_path', help='Path to save predictions')
+parser.add_argument('--save_path', default='test_pred.csv', help='Path to save predictions')
 
 opt = parser.parse_args()
 print(opt)
@@ -87,91 +88,91 @@ val_set = RNAFamilyGraphDataset(opt.val_dataset, opt.foldings_dataset, seq_max_l
 train_loader = DataLoader(train_set, batch_size=opt.batch_size, shuffle=True)
 val_loader = DataLoader(val_set, batch_size=opt.batch_size, shuffle=False)
 
-# def train_epoch(model, train_loader):
-#     model.train()
-#     losses = []
-#     accuracies = []
+def train_epoch(model, train_loader):
+    model.train()
+    losses = []
+    accuracies = []
 
-#     for batch_idx, data in enumerate(train_loader):
-#         data.x = data.x.to(opt.device)
-#         data.edge_index = data.edge_index.to(opt.device)
-#         data.edge_attr = data.edge_attr.to(opt.device)
-#         data.batch = data.batch.to(opt.device)
-#         data.y = data.y.to(opt.device)
+    for batch_idx, data in enumerate(train_loader):
+        data.x = data.x.to(opt.device)
+        data.edge_index = data.edge_index.to(opt.device)
+        data.edge_attr = data.edge_attr.to(opt.device)
+        data.batch = data.batch.to(opt.device)
+        data.y = data.y.to(opt.device)
 
-#         model.zero_grad()
+        model.zero_grad()
 
-#         out = model(data)
+        out = model(data)
 
-#         # Loss is computed with respect to the target sequence
-#         loss = loss_function(out, data.y)
-#         losses.append(loss.item())
-#         loss.backward()
-#         optimizer.step()
+        # Loss is computed with respect to the target sequence
+        loss = loss_function(out, data.y)
+        losses.append(loss.item())
+        loss.backward()
+        optimizer.step()
 
-#         # Metrics are computed with respect to generated folding
-#         pred = out.max(1)[1]
-#         accuracy = compute_metrics_family(data.y, pred)
-#         accuracies.append(accuracy)
+        # Metrics are computed with respect to generated folding
+        pred = out.max(1)[1]
+        accuracy = compute_metrics_family(data.y, pred)
+        accuracies.append(accuracy)
 
-#     avg_loss = np.mean(losses)
-#     avg_accuracy = np.mean(accuracies)
+    avg_loss = np.mean(losses)
+    avg_accuracy = np.mean(accuracies)
 
-#     print("training loss is {}".format(avg_loss))
-#     print("accuracy: {}".format(avg_accuracy))
+    print("training loss is {}".format(avg_loss))
+    print("accuracy: {}".format(avg_accuracy))
 
-#     return avg_loss.item(), avg_accuracy
+    return avg_loss.item(), avg_accuracy
 
 
-# def train(model, n_epochs, train_loader, results_dir, model_dir):
-#     print("The model contains {} parameters".format(sum(p.numel() for p in model.parameters() if p.requires_grad)))
+def run(model, n_epochs, train_loader, results_dir, model_dir):
+    print("The model contains {} parameters".format(sum(p.numel() for p in model.parameters() if p.requires_grad)))
 
-#     train_losses = []
-#     train_accuracies = []
-#     val_losses = []
-#     val_accuracies = []
+    train_losses = []
+    train_accuracies = []
+    val_losses = []
+    val_accuracies = []
 
-#     for epoch in range(n_epochs):
-#         start = time.time()
-#         print("Epoch {}: ".format(epoch + 1))
+    for epoch in range(n_epochs):
+        start = time.time()
+        print("Epoch {}: ".format(epoch + 1))
 
-#         loss, accuracy = train_epoch(model, train_loader)
-#         val_loss, val_accuracy = evaluate_family_classifier(model, val_loader,
-#                                                                           loss_function, mode='val',
-#                                                                     device=opt.device, verbose=opt.verbose)
-#         end = time.time()
-#         print("Epoch took {0:.2f} seconds".format(end - start))
+        loss, accuracy = train_epoch(model, train_loader)
+        val_loss, val_accuracy = evaluate_family_classifier(model, val_loader,
+                                                                          loss_function, mode='val',
+                                                                    device=opt.device, verbose=opt.verbose)
+        end = time.time()
+        print("Epoch took {0:.2f} seconds".format(end - start))
 
-#         if not val_accuracies or val_accuracy > max(val_accuracies):
-#             torch.save(model.state_dict(), model_dir + 'model.pt')
-#             print("Saved updated model")
-#         #
-#         train_losses.append(loss)
-#         val_losses.append(val_loss)
-#         train_accuracies.append(accuracy)
-#         val_accuracies.append(val_accuracy)
+        if not val_accuracies or val_accuracy > max(val_accuracies):
+            torch.save(model.state_dict(), model_dir + 'model.pt')
+            print("Saved updated model")
+        #
+        train_losses.append(loss)
+        val_losses.append(val_loss)
+        train_accuracies.append(accuracy)
+        val_accuracies.append(val_accuracy)
 
-#         plot_loss(train_losses, val_losses,file_name=results_dir + 'loss.jpg')
-#         plot_loss(train_accuracies, val_accuracies, file_name=results_dir + 'acc.jpg',
-#                   y_label='accuracy')
+        plot_loss(train_losses, val_losses,file_name=results_dir + 'loss.jpg')
+        plot_loss(train_accuracies, val_accuracies, file_name=results_dir + 'acc.jpg',
+                  y_label='accuracy')
 
-#         pickle.dump({
-#             'train_losses': train_losses,
-#             'val_losses': val_losses,
-#             'train_accuracies': train_accuracies,
-#             'val_accuracies': val_accuracies,
-#         }, open(results_dir + 'scores.pkl', 'wb'))
+        pickle.dump({
+            'train_losses': train_losses,
+            'val_losses': val_losses,
+            'train_accuracies': train_accuracies,
+            'val_accuracies': val_accuracies,
+        }, open(results_dir + 'scores.pkl', 'wb'))
 
-#         if len(val_accuracies) > opt.early_stopping and max(val_accuracies[-opt.early_stopping:])\
-#                 < max(val_accuracies):
-#             print("Training terminated because of early stopping")
-#             print("Best val_loss: {}".format(min(val_losses)))
-#             print("Best val_accuracy: {}".format(max(val_accuracies)))
+        if len(val_accuracies) > opt.early_stopping and max(val_accuracies[-opt.early_stopping:])\
+                < max(val_accuracies):
+            print("Training terminated because of early stopping")
+            print("Best val_loss: {}".format(min(val_losses)))
+            print("Best val_accuracy: {}".format(max(val_accuracies)))
 
-#             with open(results_dir + 'scores.txt', 'w') as f:
-#                 f.write("Best val_accuracy: {}".format(max(
-#                     val_accuracies)))
-#             break
+            with open(results_dir + 'scores.txt', 'w') as f:
+                f.write("Best val_accuracy: {}".format(max(
+                    val_accuracies)))
+            break
 
 
 def eval(model, test_loader, device):

@@ -56,8 +56,6 @@ parser.add_argument('--train_dataset', type=str,
 parser.add_argument('--val_dataset', type=str,
                     default='../data/val.fasta', help='Path to val dataset')
 
-parser.add_argument('--foldings_dataset', type=str, 
-                    default='../data/foldings.pkl', help='Path to foldings dataset')
 opt = parser.parse_args()
 print(opt)
 

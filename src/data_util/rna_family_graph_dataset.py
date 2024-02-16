@@ -75,9 +75,8 @@ class RNAFamilyGraphDataset(InMemoryDataset):
     def processed_file_names(self):
         return []
 
-    @staticmethod
-    def get_family_idx(family):
-        if family not in families:
+    def get_family_idx(self, family):
+        if family not in self.families:
             raise Exception("Family not in list")
 
-        return torch.LongTensor([families.index(family)])
+        return torch.LongTensor([self.families.index(family)])
